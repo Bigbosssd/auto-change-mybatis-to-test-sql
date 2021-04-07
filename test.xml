@@ -1,0 +1,330 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.mshis.report.biz.mybatis.mmisReport.MmisBasicMapper">
+    <resultMap id="BaseResultMap" type="com.mshis.mmis.model.basic.MmisDicMedAcc">
+        <id column="ID" property="id" jdbcType="DECIMAL"/>
+        <result column="BRANCH_CODE" property="branchCode" jdbcType="VARCHAR"/>
+        <result column="NAME" property="name" jdbcType="VARCHAR"/>
+        <result column="ORD" property="ord" jdbcType="VARCHAR"/>
+        <result column="STATE" property="state" jdbcType="DECIMAL"/>
+        <result column="ACC_ID_C" property="accIdC" jdbcType="DECIMAL"/>
+    </resultMap>
+    <sql id="Base_Column_List">
+        ID, CODE, NAME, INPUTCODE1, INPUTCODE2, KIND_ID, STATE, BRANCH_CODE, PARENT_ID, IS_LEAF,
+        ORD, DESCIRBE, MODIFY_EMPID, MODIFY_TIME, NORM_CODE, INSURANCE_CODE, CHARGE_EMP,
+        OFFICE_PHONE, CLOUD_ID
+    </sql>
+    <sql id="Base_Column_List_STO">
+        ID, CODE, NAME, BRANCH_CODE, DEPT_ID, TOLINK_TYPE, TOLINK, ADDR, LOCATION, IS_IN_PHARM,
+        IS_OUT_PHARM, IS_PIVAS, IS_DO_CNT_STO, REMARK, INPUTCODE1, INPUTCODE2, STATE, ORD,
+        CREATE_EMPID, CREATE_TIME, MODIFY_EMPID, MODIFY_TIME, MONTH, MONTH_ACC,WORK_PLACE_ID, OUT_DISP_INF, IN_MEDC_INF, ORDER_MODEL
+    </sql>
+    <select id="getBranchTree" resultType="com.mshis.core.model.PubBranch">
+        SELECT 0 PARENT_CODE,'1' CODE,'全部' NAME,'' SHORT_NAME,0 ORGAN_LAYER FROM DUAL
+        UNION ALL
+        SELECT 1 PARENT_CODE,FORMAT(ID,0) CODE ,NAME,SHORT_NAME,0 ORGAN_LAYER FROM WDCLOUD.PUB_BRANCH WHERE ORGAN_LAYER=4 AND
+        STATE=1
+            AND CODE=2
+        UNION ALL
+        SELECT
+        CASE
+        WHEN A.ORGAN_LAYER=5 THEN (SELECT ID FROM WDCLOUD.PUB_BRANCH WHERE CODE=A.PARENT_CODE AND STATE=1)
+        WHEN A.ORGAN_LAYER=4 THEN A.ID
+        END PARENT_CODE,
+        A.CODE ,
+        (CASE WHEN A.ORGAN_LAYER = 5 THEN A.NAME WHEN A.ORGAN_LAYER = 4 THEN '总院' END) NAME ,A.SHORT_NAME,ORGAN_LAYER FROM WDCLOUD.PUB_BRANCH A WHERE A.ORGAN_LAYER IN
+        (4,5) AND STATE=1
+            AND (A.CODE=2 OR A.PARENT_CODE=2)
+        order by code
+    </select>
+    <select id="getBranchList" resultType="com.mshis.core.model.PubBranch">
+        select * from WDCLOUD.PUB_BRANCH where (code = 2 or parent_code = 2) and state = 1 and organ_layer in (3,4,5)
+        order by code
+    </select>
+    <select id="getBranchAll" resultType="com.mshis.core.model.PubBranch">
+        SELECT ID,CODE,NAME,ORGAN_LAYER PARENT_CODE FROM WDCLOUD.PUB_BRANCH WHERE ORGAN_LAYER=4 and state=1
+        union
+        select 0 id,'4' code,'全选' name,0 PARENT_CODE from dual
+    </select>
+
+    <select id="getDeptForOutOrHos" resultType="com.mshis.mmis.model.basic.MmisPubDept">
+        select
+        <include refid="Base_Column_List"/>
+        from WDCLOUD.PUB_DEPT
+        WHERE BRANCH_CODE in (${branchCodeSql})
+        and STATE = 1
+        and IS_LEAF = 1
+        and ID in (select BIZ_DEPT_ID from PUB_EMP_INFO where ID in
+        (select EMP_ID from PUB_EMP_CLASSIFY where
+            KIND_ID = 2
+            (KIND_ID = 2 or KIND_ID = 4 or KIND_ID = 5 or KIND_ID = 6)
+        ))
+    </select>
+    <!--    todo PG_KTAP_PUB_DIC.F_GET_BRANCH_LIST() -->
+    <select id="findBranchCodeSql" resultType="java.lang.String">
+        SELECT PG_KTAP_PUB_DIC.F_GET_BRANCH_LIST(2, 2, 2) FROM DUAL
+    </select>
+    <select id="selectByPE" resultType="com.mshis.mmis.dto.outpatient.InformationDto">
+        SELECT
+        W.ID AS ID,W.NAME AS NAME,W.INPUTCODE1 AS INPUTCODE1,W.INPUTCODE2 AS INPUTCODE2
+        FROM WDCLOUD.PUB_EMP W,PUB_EMP_CLASSIFY CLASSIFY,PUB_EMP_KIND KIND
+        WHERE W.BRANCH_CODE IN (${branchCode})
+        AND W.STATE = 1
+        AND CLASSIFY.EMP_ID = W.ID
+        AND KIND.ID = CLASSIFY.KIND_ID
+        AND KIND.KIND = 2
+            AND W.DEPT_ID = '2'
+        ORDER BY W.ID
+    </select>
+    <!--    todo PG_KTAP_PUB_DIC.F_GET_EMP_BRANCH_CODE-->
+    <select id="getEmpMedTypeByAcc" resultType="com.mshis.mmis.model.basic.MmisDicMedType">
+        SELECT A.ID, A.NAME, A.ORD
+        FROM MMIS_DIC_MED_TYPE A, MMIS_EMP_PRIVS B
+        WHERE A.ID = B.GRANT_ID
+        AND B.PRIVILEGE = 'USE_MED_TYPE'
+        AND B.EMP_ID = 2
+        AND A.STATE = 1
+        AND A.BRANCH_CODE = PG_KTAP_PUB_DIC.F_GET_EMP_BRANCH_CODE (2)
+            AND ACC_ID = 2
+        UNION
+        SELECT A.ID, A.NAME, A.ORD
+        FROM MMIS_DIC_MED_TYPE A,
+        MMIS_ROLE_PRIVS B,
+        (SELECT ROLE_ID
+        FROM SYS_ROLE_EMP
+        WHERE EMP_ID = 2) D
+        WHERE A.ID = B.GRANT_ID
+        AND B.PRIVILEGE = 'USE_MED_TYPE'
+        AND B.ROLE_ID = D.ROLE_ID
+        AND A.STATE = 1
+        AND A.BRANCH_CODE = PG_KTAP_PUB_DIC.F_GET_EMP_BRANCH_CODE (2)
+            AND ACC_ID = 2
+    </select>
+    <select id="getMedTypeByAcc" resultType="com.mshis.mmis.model.basic.MmisDicMedType">
+        SELECT A.*,B.NAME AS ACC_NAME,C.NAME AS FEE_NAME
+        FROM
+        MMIS_DIC_MED_TYPE A
+        LEFT JOIN MMIS_DIC_MED_ACC B
+        ON A.ACC_ID=B.ID
+        LEFT JOIN ACC_DIC_FEE_ITEM C
+        ON A.FEE_ID=C.ID
+        WHERE A.STATE = 1
+            AND A.BRANCH_CODE = '2'
+            AND A.ACC_ID='2'
+        ORDER BY A.ORD ASC
+    </select>
+    <select id="findMedAccByBranchCode" resultMap="BaseResultMap">
+        SELECT *
+        FROM MMIS_DIC_MED_ACC
+        WHERE
+        1=1
+            AND BRANCH_CODE in (${branchCodeSql})
+            AND NAME LIKE CONCAT(CONCAT('%','2'),'%')
+            AND STATE=2
+            AND STATE !=2
+        ORDER BY STATE DESC,ORD ASC
+    </select>
+    <select id="findMedTypeByBranchCode" resultType="com.mshis.mmis.model.ext.basic.MmisDicMedTypeExt">
+        SELECT A.*,B.NAME AS ACC_NAME,C.NAME AS FEE_NAME
+        FROM
+        MMIS_DIC_MED_TYPE A
+        LEFT JOIN MMIS_DIC_MED_ACC B
+        ON A.ACC_ID=B.ID
+        LEFT JOIN ACC_DIC_FEE_ITEM C
+        ON A.FEE_ID=C.ID
+        WHERE
+        1 = 1
+            AND A.STATE != 2
+            AND A.BRANCH_CODE IN (${branchCodeSql})
+            AND A.NAME LIKE CONCAT(CONCAT('%','2'),'%')
+            AND A.TYPE='2'
+            AND A.STATE = 2
+        ORDER BY A.STATE DESC,A.ORD ASC
+    </select>
+    <select id="selectByPrimaryKey" resultMap="BaseResultMap" parameterType="java.lang.Integer">
+        select
+        <include refid="Base_Column_List"/>
+        from MMIS_STORAGE
+        where ID = 2
+    </select>
+    <select id="findIdStringByAccId" resultType="java.lang.String">
+        select GROUP_CONCAT(ID)
+        from MMIS_DIC_MED_TYPE
+        where BRANCH_CODE IN (${branchCode})
+            and ACC_ID in (${accIds})
+            and STATE = 2
+    </select>
+    <select id="findMedTypeC" resultType="com.mshis.mmis.model.wdcloud.MmisDicMedTypeC">
+        SELECT A.*,B.NAME AS ACC_NAME
+        FROM
+        WDCLOUD.MMIS_DIC_MED_TYPE_C A
+        LEFT JOIN WDCLOUD.MMIS_DIC_MED_ACC_C B
+        ON A.ACC_ID=B.ID
+        WHERE 1 = 1
+            AND A.STATE != 2
+            AND A.NAME LIKE CONCAT(CONCAT('%','2'),'%')
+            AND A.TYPE='2'
+            AND A.STATE = 2
+        ORDER BY A.STATE DESC,A.ORD ASC
+    </select>
+    <select id="findMedAccC" resultType="com.mshis.mmis.model.wdcloud.MmisDicMedAccC">
+        SELECT *
+        FROM WDCLOUD.MMIS_DIC_MED_ACC_C
+        WHERE
+        1=1
+            AND NAME LIKE CONCAT(CONCAT('%','2'),'%')
+            AND STATE=2
+            AND STATE !=2
+        ORDER BY STATE DESC,ORD ASC
+    </select>
+    <select id="findIdStringByAccCId" resultType="java.lang.String">
+        select GROUP_CONCAT(ID)
+        from WDCLOUD.MMIS_DIC_MED_TYPE_C
+        where 1=1
+            and ACC_ID in (${accIds})
+            and STATE = 2
+    </select>
+    <!--    todo PG_KTAP_PUB_DIC.F_GET_EMP_BRANCH_CODE-->
+    <select id="findByEmpJurisdiction" resultType="com.mshis.mmis.model.basic.MmisDicMedType">
+        SELECT A.ID, A.NAME, A.ORD
+        FROM MMIS_DIC_MED_TYPE A, MMIS_EMP_PRIVS B
+        WHERE     A.ID = B.GRANT_ID
+          AND B.PRIVILEGE = 'USE_MED_TYPE'
+          AND B.EMP_ID = 2
+          AND A.STATE = 1
+          AND A.BRANCH_CODE = PG_KTAP_PUB_DIC.F_GET_EMP_BRANCH_CODE (2)
+        UNION
+        SELECT A.ID, A.NAME, A.ORD
+        FROM MMIS_DIC_MED_TYPE A,
+             MMIS_ROLE_PRIVS B,
+             (SELECT ROLE_ID
+              FROM SYS_ROLE_EMP
+              WHERE EMP_ID = 2) D
+        WHERE     A.ID = B.GRANT_ID
+          AND B.PRIVILEGE = 'USE_MED_TYPE'
+          AND B.ROLE_ID = D.ROLE_ID
+          AND A.STATE = 1
+          AND A.BRANCH_CODE = PG_KTAP_PUB_DIC.F_GET_EMP_BRANCH_CODE (2)
+    </select>
+    <select id="findMedNameByInputCodeSpec" resultType="com.mshis.mmis.model.ext.basic.MmisDicMedExt">
+        SELECT * FROM(SELECT distinct A.*,
+        (SELECT SNAME FROM MMIS_DIC_FACTORY_C WHERE ID=A.FACTORY_ID) FACTORY_SNAME,
+        (select NAME from MMIS_DIC_GNAME where ID = A.GNAME_ID) as GNAME
+        FROM MMIS_DIC_MED A,MMIS_DIC_MED_ALIAS B
+        WHERE
+            A.STATE!=2
+            A.STATE= 2
+            AND A.TYPE= 2
+            AND A.MED_TYPE_ID= 2
+        AND A.ID=B.MED_ID
+        AND (B.INPUTCODE1 LIKE UPPER (concat(concat('%',2),'%'))
+        OR B.INPUTCODE2 LIKE UPPER (concat(concat('%',2),'%'))
+        OR B.NAME LIKE concat(concat('%',2),'%')
+        OR A.CODE LIKE concat(concat('%',2),'%'))
+        AND A.MED_TYPE_ID IN
+        <foreach item="item" index="index" collection="medTypeList" open="("
+                 separator="," close=")">
+            #{item.id}
+        </foreach>
+        AND
+        A.BRANCH_CODE in (${branchCodeSql})
+        ORDER BY char_length(A.NAME))
+            WHERE limit 2
+    </select>
+
+    <select id="findMedNameByInputCodeC" resultType="com.mshis.mmis.model.ext.drugs.MmisDicMedCExt">
+        SELECT * FROM(SELECT distinct A.*,
+        (SELECT SNAME FROM MMIS_DIC_FACTORY_C WHERE ID=A.FACTORY_ID) FACTORY_SNAME,
+        (select NAME from MMIS_DIC_GNAME where ID = A.GNAME_ID) as GNAME
+        FROM MMIS_DIC_MED_C A
+        WHERE
+            A.STATE!=2
+            A.STATE= 2
+            AND A.TYPE= 2
+            AND A.MED_TYPE_ID= 2
+        AND (A.INPUTCODE1 LIKE UPPER (concat(concat('%',2),'%'))
+        OR A.INPUTCODE2 LIKE UPPER (concat(concat('%',2),'%'))
+        OR A.NAME LIKE concat(concat('%',2),'%')
+        OR A.CODE LIKE concat(concat('%',2),'%'))
+        ORDER BY char_length(A.NAME))
+            WHERE limit <= 2
+    </select>
+    <select id="getBoilStoIds" resultType="java.lang.String">
+        SELECT GROUP_CONCAT(DISTINCT VALUE) FROM WDCLOUD.SYS_PARAMETER WHERE BRANCH_CODE IN (${branchCode})
+                                                                         AND NAME='2'
+    </select>
+    <select id="getSysParameter" resultType="java.lang.String">
+        SELECT VALUE FROM WDCLOUD.SYS_PARAMETER WHERE NAME='2' AND
+            BRANCH_CODE='2'
+    </select>
+    <select id="getFeeNature" resultType="com.mshis.emis.model.basic.AccDicFeeNature">
+        SELECT ID,NAME,KIND
+        FROM ACC_DIC_FEE_NATURE
+        WHERE STATE = 1
+          AND BRANCH_CODE IN (${branchCodeSql})
+        ORDER BY ORD
+    </select>
+    <select id="getAllStorageList" resultType="com.mshis.mmis.model.basic.MmisStorage">
+        SELECT
+        <include refid="Base_Column_List_STO"/>
+        FROM MMIS_STORAGE STO
+        where STO.ID in (
+        select A.GRANT_ID from MMIS_EMP_PRIVS a where A.EMP_ID = 2 and A.PRIVILEGE = 'USE_STO'
+        union
+        select A.GRANT_ID from MMIS_ROLE_PRIVS a where A.ROLE_ID in (select RE.ROLE_ID from WDCLOUD.sys_role role,WDCLOUD.sys_role_emp
+        re where role.STATE = 1 and ROLE.ID = RE.ROLE_ID and RE.EMP_ID = 2)
+        and A.PRIVILEGE = 'USE_STO'
+        ) and STATE = 1
+        AND STO.BRANCH_CODE IN (
+        SELECT 2 FROM DUAL UNION
+        SELECT PARENT_CODE FROM WDCLOUD.PUB_BRANCH WHERE CODE= 2)
+    </select>
+
+    <select id="getPurStorages" resultType="com.mshis.mmis.model.basic.MmisStorage">
+        SELECT
+            DISTINCT A.*
+        FROM MMIS_STORAGE A,MMIS_STO_RELA B
+        where A.STATE = 1
+          AND A.ID = B.STO_ID
+          AND B.TARGET_TYPE = 3
+          AND B.TYPE = 'I'
+          AND A.BRANCH_CODE IN (
+            SELECT 2 FROM DUAL UNION
+            SELECT PARENT_CODE FROM WDCLOUD.PUB_BRANCH WHERE CODE= 2)
+    </select>
+    <select id="getStoByPrimaryKey" resultType="com.mshis.mmis.model.basic.MmisStorage">
+        select
+        <include refid="Base_Column_List_STO"/>
+        from MMIS_STORAGE
+        where ID = 2
+    </select>
+    <select id="getEmlClass" resultType="com.mshis.mmis.model.wdcloud.MmisDicEmlClassC">
+        SELECT * FROM WDCLOUD.MMIS_DIC_EML_CLASS_C WHERE STATE=1 ORDER BY ORD
+    </select>
+    <select id="getDepts" resultType="com.mshis.mmis.model.basic.MmisPubDept">
+        select * from WDCLOUD.pub_dept where branch_code='2' and STATE=1
+    </select>
+    <select id="getCust" resultType="com.mshis.mmis.model.basic.MmisDicCustomer">
+        SELECT ID, NAME,INPUTCODE1,INPUTCODE2
+        FROM MMIS_DIC_CUSTOMER
+        WHERE BRANCH_CODE IN (${branchCode})
+            AND STATE=1
+        AND CAN_INSTO=1
+            AND (INPUTCODE1 LIKE UPPER(concat(concat('%',2),'%'))OR INPUTCODE2 LIKE UPPER
+            (concat(concat('%',2),'%')) OR NAME LIKE concat(concat('%',2),'%'))
+    </select>
+    <select id="findInstoAccCustomerByBillSn" resultType="com.mshis.mmis.model.basic.MmisDicCustomer">
+        SELECT * FROM MMIS_DIC_CUSTOMER
+        WHERE ID IN
+        (SELECT DISTINCT SOURCE_ID FROM MMIS_INSTO_ACC WHERE SOURCE_TYPE=2
+            AND STO_ID = 2
+            AND BILL_SN BETWEEN 2 AND 2
+        )
+    </select>
+    <select id="selectPresClass" resultType="com.mshis.outpat.model.pres.OisDicPreCategory">
+        select ID,NAME,SHORT_NAME from OIS_DIC_PRE_CATEGORY where state=1
+            and branch_code='2'
+            and id= 2
+        ORDER BY ORD ASC
+    </select>
+</mapper>

@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="auto_mybatis_to_sql:jar">
+    <output-path>$PROJECT_DIR$/out/artifacts/auto_mybatis_to_sql_jar</output-path>
+    <root id="archive" name="auto_mybatis_to_sql.jar">
+      <element id="module-output" name="auto_mybatis_to_sql" />
+    </root>
+  </artifact>
+</component>
